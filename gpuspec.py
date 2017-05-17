@@ -104,5 +104,5 @@ with bfp.Pipeline() as pipeline:
     raw_guppi = new_read_guppi_raw(['blc1_guppi_57388_HIP113357_0010.0000.raw'])
     g_guppi = blocks.copy(raw_guppi, space='cuda')
     ffted = blocks.fft(g_guppi, axes='fine_time', axis_labels='fft_freq')
-    blocks.print_header(ffted)
+    square_modulo = blocks.detect(ffted, mode='jones')
     pipeline.run()
