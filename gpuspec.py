@@ -71,7 +71,6 @@ class GuppiRawSourceBlock(bfp.SourceBlock):
         self.already_read_header = True
         
         ohdr['name'] = sourcename
-        print "Header:", ohdr
         return [ohdr]
     def on_data(self, reader, ospans):
         if not self.already_read_header:
