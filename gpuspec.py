@@ -104,8 +104,6 @@ def new_read_guppi_raw(filenames, *args, **kwargs):
 with bfp.Pipeline() as pipeline:
     raw_guppi = new_read_guppi_raw(['blc1_guppi_57388_HIP113357_0010.0000.raw'])
     g_guppi = blocks.copy(raw_guppi, space='cuda')
-    #g_guppi = views.split_axis(g_guppi, 'time', 256, label='fine_time')
-    blocks.print_header(g_guppi)
-    #ffted = blocks.fft(g_guppi, axes='fine_time', axis_labels='freq')
-    #test_back = blocks.copy(ffted, space='system')
+    ffted = blocks.fft(g_guppi, axes='fine_time', axis_labels='fft_freq')
+    blocks.print_header(ffted)
     pipeline.run()
