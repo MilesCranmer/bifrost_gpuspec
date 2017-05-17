@@ -1,0 +1,2 @@
+docker exec bifrost_minion bash -c "python gpuspec.py"
+#watch -n 0.01 nvidia-smi
