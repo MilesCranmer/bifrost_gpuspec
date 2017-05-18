@@ -4,6 +4,8 @@ import bifrost.pipeline as bfp
 import bifrost.blocks as blocks
 import bifrost.views as views
 import bifrost.guppi_raw as guppi_raw
+import bifrost.sigproc as sigproc
+from bifrost.DataType import DataType
 
 from copy import deepcopy
 
@@ -46,7 +48,7 @@ class GuppiRawSourceBlock(bfp.SourceBlock):
                 'dtype':  'ci' + str(nbit),
                 'shape':  [-1, nchan, ihdr['NTIME'], ihdr['NPOL']],
                 # Note: 'time' (aka block) is the frame axis
-                'labels': ['time', 'freq', 'fine_time', 'pol'],
+                'labels': ['time', 'channel', 'fine_time', 'pol'],
                 'scales': [(tstart_unix, abs(dt_s)*ihdr['NTIME']),
                        (f0_MHz, df_MHz),
                        (0, dt_s),
@@ -102,10 +104,10 @@ class GuppiRawSourceBlock(bfp.SourceBlock):
 def new_read_guppi_raw(filenames, *args, **kwargs):
     return GuppiRawSourceBlock(filenames, *args, **kwargs)
 
-class SquareFirstBlock(bfp.TransformBlock):
+class GrabFirstBlock(bfp.TransformBlock):
     def __init__(self, iring, axis):
         """ Square the first element of an axis """
-        super(SquareFirstBlock, self).__init__(iring)
+        super(GrabFirstBlock, self).__init__(iring)
         self.specified_axis = axis
     def define_valid_input_spaces(self):
         """Return set of valid spaces (or 'any') for each input"""
@@ -127,15 +129,19 @@ class SquareFirstBlock(bfp.TransformBlock):
             a=ispan.data,
             b=ospan.data)
 
-def first_squared(iring, axis=1):
-    return SquareFirstBlock(iring, axis)
+def grab_first(iring, axis=1):
+    return GrabFirstBlock(iring, axis)
+
 
 with bfp.Pipeline() as pipeline:
     raw_guppi = new_read_guppi_raw(['blc1_guppi_57388_HIP113357_0010.0000.raw'])
     g_guppi = blocks.copy(raw_guppi, space='cuda')
-    ffted = blocks.fft(g_guppi, axes='fine_time', axis_labels='fft_freq')
+    ffted = blocks.fft(g_guppi, axes='fine_time', axis_labels='freq')
     modulo = blocks.detect(ffted, mode='stokes')
-    square_modulo = first_squared(modulo, 0)
-    blocks.print_header(square_modulo)
-    #blocks.write_sigproc(square_modulo, "blc1_HIP113357.fil")
+    # Take I
+    first_element = grab_first(modulo, 0)
+    transposed = blocks.transpose(first_element, ['channel', 'time', 'pol', 'freq'])
+    renamed = views.rename_axis(transposed, 'channel', 'beam')
+    blocks.print_header(first_element)
+    blocks.write_sigproc(renamed)
     pipeline.run()
