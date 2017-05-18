@@ -5,6 +5,8 @@ import bifrost.blocks as blocks
 import bifrost.views as views
 import bifrost.guppi_raw as guppi_raw
 
+from copy import deepcopy
+
 def get_with_default(obj, key, default=None):
 	return obj[key] if key in obj else default
 
@@ -100,9 +102,40 @@ class GuppiRawSourceBlock(bfp.SourceBlock):
 def new_read_guppi_raw(filenames, *args, **kwargs):
     return GuppiRawSourceBlock(filenames, *args, **kwargs)
 
+class SquareFirstBlock(bfp.TransformBlock):
+    def __init__(self, iring, axis):
+        """ Square the first element of an axis """
+        super(SquareFirstBlock, self).__init__(iring)
+        self.specified_axis = axis
+    def define_valid_input_spaces(self):
+        """Return set of valid spaces (or 'any') for each input"""
+        return ('cuda',)
+    def on_sequence(self, iseq):
+        ihdr = iseq.header
+        ohdr = deepcopy(ihdr)
+        ohdr['_tensor']['shape'][3] = 1
+        return ohdr
+    def on_data(self, ispan, ospan):
+        #idata = ispan.data
+        #odata = ospan.data
+        bf.map(
+            """
+            b(i, j, k) = a(i, j, k, %d);
+            """ % self.specified_axis,
+            shape,
+            *inds,
+            a=ispan.data,
+            b=ospan.data)
+
+def first_squared(iring, axis=1):
+    return SquareFirstBlock(iring, axis)
+
 with bfp.Pipeline() as pipeline:
     raw_guppi = new_read_guppi_raw(['blc1_guppi_57388_HIP113357_0010.0000.raw'])
     g_guppi = blocks.copy(raw_guppi, space='cuda')
     ffted = blocks.fft(g_guppi, axes='fine_time', axis_labels='fft_freq')
-    square_modulo = blocks.detect(ffted, mode='jones')
+    modulo = blocks.detect(ffted, mode='stokes')
+    square_modulo = first_squared(modulo, 0)
+    blocks.print_header(square_modulo)
+    #blocks.write_sigproc(square_modulo, "blc1_HIP113357.fil")
     pipeline.run()
