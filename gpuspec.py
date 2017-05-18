@@ -1,4 +1,4 @@
-import bifrost
+import bifrost as bf
 
 import bifrost.pipeline as bfp
 import bifrost.blocks as blocks
@@ -20,6 +20,7 @@ class GuppiRawSourceBlock(bfp.SourceBlock):
         super(GuppiRawSourceBlock, self).__init__(sourcenames,
                               gulp_nframe=gulp_nframe,
                               *args, **kwargs)
+        self.always_return_0 = False
     def create_reader(self, sourcename):
         return open(sourcename, 'rb')
     def on_sequence(self, reader, sourcename):
@@ -77,6 +78,8 @@ class GuppiRawSourceBlock(bfp.SourceBlock):
         ohdr['name'] = sourcename
         return [ohdr]
     def on_data(self, reader, ospans):
+        if self.always_return_0:
+            return [0]
         if not self.already_read_header:
             # Skip over header
             #ihdr = guppi_raw.read_header(reader)
@@ -86,20 +89,18 @@ class GuppiRawSourceBlock(bfp.SourceBlock):
             elif nbyte < len(self.header_buf):
                 raise IOError("Block header is truncated")
             self.already_read_header = False
-            ospan = ospans[0]
-            odata = ospan.data
-            nbyte = reader.readinto(odata)
-            if nbyte % ospan.frame_nbyte:
-                #return [0]
-                raise IOError("Block data is truncated")
-            nframe = nbyte // ospan.frame_nbyte
-            #print "nframe:", nframe
-            #print "nbyte:", nbyte
-            return [nframe]
-        else:
-            #only read one time step!
+        ospan = ospans[0]
+        odata = ospan.data
+        nbyte = reader.readinto(odata)
+        if nbyte % ospan.frame_nbyte:
+            raise IOError("Block data is truncated")
             reader.close()
+            self.always_return_0 = True
             return [0]
+        nframe = nbyte // ospan.frame_nbyte
+        #print "nframe:", nframe
+        #print "nbyte:", nbyte
+        return [nframe]
 
 def new_read_guppi_raw(filenames, *args, **kwargs):
     return GuppiRawSourceBlock(filenames, *args, **kwargs)
@@ -118,14 +119,14 @@ class GrabFirstBlock(bfp.TransformBlock):
         ohdr['_tensor']['shape'][3] = 1
         return ohdr
     def on_data(self, ispan, ospan):
-        #idata = ispan.data
-        #odata = ospan.data
+        idata = ispan.data
+        odata = ospan.data
         bf.map(
             """
             b(i, j, k) = a(i, j, k, %d);
             """ % self.specified_axis,
-            shape,
-            *inds,
+            odata.shape,
+            'i', 'j', 'k',
             a=ispan.data,
             b=ospan.data)
 
