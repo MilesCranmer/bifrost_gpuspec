@@ -93,7 +93,7 @@ class GuppiRawSourceBlock(bfp.SourceBlock):
         odata = ospan.data
         nbyte = reader.readinto(odata)
         if nbyte % ospan.frame_nbyte:
-            raise IOError("Block data is truncated")
+            #raise IOError("Block data is truncated")
             reader.close()
             self.always_return_0 = True
             return [0]
@@ -121,28 +121,27 @@ class GrabFirstBlock(bfp.TransformBlock):
     def on_data(self, ispan, ospan):
         idata = ispan.data
         odata = ospan.data
+        #print ospan.data.shape, ispan.data.shape
         bf.map(
-            """
-            b(i, j, k) = a(i, j, k, %d);
-            """ % self.specified_axis,
-            odata.shape,
-            'i', 'j', 'k',
+            "b(i, j, k, l) = a(i, j, k, l)",
+            ospan.data.shape,
+            'i', 'j', 'k', 'l',
             a=ispan.data,
             b=ospan.data)
 
-def grab_first(iring, axis=1):
+def grab_first(iring, axis=0):
     return GrabFirstBlock(iring, axis)
 
 
 with bfp.Pipeline() as pipeline:
-    raw_guppi = new_read_guppi_raw(['blc1_guppi_57388_HIP113357_0010.0000.raw'])
-    g_guppi = blocks.copy(raw_guppi, space='cuda')
-    ffted = blocks.fft(g_guppi, axes='fine_time', axis_labels='freq')
-    modulo = blocks.detect(ffted, mode='stokes')
+    raw_guppi = new_read_guppi_raw(['blc1_guppi_57388_HIP113357_0010.0000.raw'], buffer_nframe=1)
+    g_guppi = blocks.copy(raw_guppi, space='cuda', buffer_nframe=1)
+    ffted = blocks.fft(g_guppi, axes='fine_time', axis_labels='freq', buffer_nframe=1)
+    modulo = blocks.detect(ffted, mode='stokes', buffer_nframe=1)
     # Take I
     first_element = grab_first(modulo, 0)
     transposed = blocks.transpose(first_element, ['channel', 'time', 'pol', 'freq'])
     renamed = views.rename_axis(transposed, 'channel', 'beam')
-    blocks.print_header(first_element)
+    blocks.print_header(renamed)
     blocks.write_sigproc(renamed)
     pipeline.run()
